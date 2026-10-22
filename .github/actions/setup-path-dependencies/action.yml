@@ -6,6 +6,6 @@ runs:
     - uses: actions/checkout@v7
       with:
         repository: Sn0wo2/socksaddr
-        ref: 265e7149b07e3f7640d346ed8edbf2b1f4eec446
+        ref: c1fe01566d842937a2776731d649bc0ccc87d648
         path: workspace/socksaddr
         persist-credentials: false
