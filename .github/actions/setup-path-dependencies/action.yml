@@ -1,0 +1,11 @@
+name: Set up path dependencies
+description: Check out the Rust workspace path dependencies for mux-cool-rs
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v7
+      with:
+        repository: Sn0wo2/socksaddr
+        ref: 265e7149b07e3f7640d346ed8edbf2b1f4eec446
+        path: workspace/socksaddr
+        persist-credentials: false
