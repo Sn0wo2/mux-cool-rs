@@ -1,8 +1,4 @@
-.DEFAULT_GOAL := ci
-
-CARGO_FLAGS ?=
-
-.PHONY: all fmt fmt-check check check-all-features check-no-default lint lint-fix test test-all test-no-default doc security ci build publish-dry release release-snapshot clean
+.PHONY: all fmt fmt-check check check-all-features check-no-default lint lint-fix test test-all test-no-default doc security ci build publish-dry clean
 
 ci: lint check check-no-default test test-all test-no-default doc security
 
@@ -18,10 +14,10 @@ check:
 	cargo check --workspace --all-targets $(CARGO_FLAGS)
 
 check-all-features:
-	cargo check --workspace --all-targets --all-features $(CARGO_FLAGS)
+	cargo check --workspace --all-targets --all-features
 
 check-no-default:
-	cargo check --workspace --all-targets --no-default-features $(CARGO_FLAGS)
+	cargo check --workspace --all-targets --no-default-features
 
 lint-fix: fmt
 	cargo clippy --workspace --all-targets --all-features --fix --allow-dirty --allow-staged
@@ -43,9 +39,6 @@ build:
 
 publish-dry:
 	cargo publish --dry-run --allow-dirty
-
-release release-snapshot:
-	goreleaser release $(if $(filter release-snapshot,$@),--snapshot) --clean --skip=publish,validate
 
 clean:
 	cargo clean
