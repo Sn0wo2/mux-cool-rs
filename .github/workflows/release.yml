@@ -237,6 +237,7 @@ jobs:
         if: *publish-crates
         uses: katyo/publish-crates@v2
         with:
+          path: workspace/mux-cool-rs
           registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           args: --allow-dirty
 
