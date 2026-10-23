@@ -4,11 +4,13 @@ version = 4
 
 [[package]]
 name = "mux-cool-rs"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "socksaddr",
 ]
 
 [[package]]
 name = "socksaddr"
-version = "0.0.0"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86e7db52af5ece6472ef442195478265655488f65a0a0b7e7bd0ff23592af08d"

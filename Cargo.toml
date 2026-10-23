@@ -2,14 +2,13 @@
 name = "mux-cool-rs"
 description = "Xray mux.cool frame encoding and decoding"
 readme = "README.md"
-version = "0.0.0"
+version = "0.0.1"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/Sn0wo2/mux-cool-rs"
-publish = false
 
 [dependencies]
-socksaddr = { path = "../socksaddr" }
+socksaddr = "0.0.4"
 
 [lints.rust]
 unsafe_code = "forbid"
