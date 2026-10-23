@@ -1,0 +1,36 @@
+version: 2
+
+project_name: mux-cool-rs
+
+builds:
+  - skip: true
+
+source:
+  enabled: false
+
+archives:
+  - id: source
+    meta: true
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_source"
+    files:
+      - "src/**"
+      - "crates/**"
+      - "tests/**"
+      - "benches/**"
+      - "examples/**"
+      - ".cargo/**"
+      - "build.r[s]"
+      - "Cargo.toml"
+      - "Cargo.loc[k]"
+      - "README.m[d]"
+      - "LICENS[E]"
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ .Version }}-next"
+
+changelog:
+  disable: true

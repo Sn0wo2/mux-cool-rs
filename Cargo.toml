@@ -160,6 +160,7 @@ use_self = "warn"
 used_underscore_items = "warn"
 useless_let_if_seq = "warn"
 verbose_bit_mask = "warn"
+verbose_file_reads = "warn"
 zero_sized_map_values = "warn"
 
 [lints.rustdoc]
