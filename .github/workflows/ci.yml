@@ -17,9 +17,10 @@ jobs:
     name: Checks
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
+      pull-requests: write
     outputs:
-      autofix: ${{ steps.patch.outputs.changed }}
+      has_library: ${{ steps.metadata.outputs.has_library }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -35,9 +36,15 @@ jobs:
           cache-workspace-crates: true
           save-if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
 
+      - name: Collect workspace metadata
+        id: metadata
+        run: node scripts/collect-ci-metadata.js
+
       - name: Apply lint fixes
         continue-on-error: true
-        run: make lint-fix
+        run: |
+          cargo fmt-all
+          cargo lint-fix
 
       - name: Save lint fixes
         id: patch
@@ -49,42 +56,38 @@ jobs:
             git restore --worktree -- '*.rs'
           fi
 
-      - uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() && steps.patch.outputs.changed == 'true' }}
-        with:
-          name: lint-fixes
-          path: ${{ runner.temp }}/lint-fixes.patch
-          retention-days: 7
-          if-no-files-found: error
-
-      - run: make lint check check-no-default test test-all test-no-default doc
+      - run: |
+          cargo fmt-check
+          cargo lint
+          cargo check-ws
+          cargo check-no-default
+          cargo test-ws
+          cargo test-all-features
+          cargo test-no-default
+          cargo doc-all
 
       - uses: EmbarkStudios/cargo-deny-action@v2
 
-  autofix:
-    needs: check
-    if: >-
-      !cancelled() && needs.check.outputs.autofix == 'true' &&
-      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v7
+      - name: Checkout the branch for autofix
+        id: autofix_checkout
+        if: >-
+          !cancelled() && steps.patch.outputs.changed == 'true' &&
+          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
 
-      - uses: actions/download-artifact@v8
-        with:
-          name: lint-fixes
-          path: ${{ runner.temp }}/lint-fixes
+      - name: Apply lint fixes
+        id: apply_fix
+        if: ${{ !cancelled() && steps.autofix_checkout.outcome == 'success' }}
+        run: git apply --include='*.rs' "$RUNNER_TEMP/lint-fixes.patch"
 
-      - run: git apply --include='*.rs' "$RUNNER_TEMP/lint-fixes/lint-fixes.patch"
-
-      - uses: peter-evans/create-pull-request@v8
+      - name: Create autofix pull request
+        if: ${{ !cancelled() && steps.apply_fix.outcome == 'success' }}
+        uses: peter-evans/create-pull-request@v8
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore(autofix): formatting and lint"
           branch: auto-fix/rust-${{ github.event.pull_request.number || github.ref_name }}
           delete-branch: true
@@ -118,6 +121,8 @@ jobs:
 
   semver:
     name: Semantic versioning
+    needs: check
+    if: needs.check.outputs.has_library == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
     permissions:
