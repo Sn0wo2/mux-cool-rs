@@ -161,4 +161,4 @@ broken_intra_doc_links = "deny"
 unescaped_backticks = "warn"
 
 [dependencies]
-socksaddr = "0.0.4"
+socksaddr = "0.0.5"
