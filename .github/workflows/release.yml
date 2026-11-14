@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*.*"]
   workflow_dispatch:
     inputs:
       version:
@@ -106,8 +106,24 @@ jobs:
           VERIFY_VERSION: ${{ !inputs.snapshot }}
           VERSION: ${{ steps.version.outputs.version }}
 
+      - name: Detect reusable CI checks
+        id: ci
+        if: >-
+          github.event_name == 'push' && steps.release.outputs.skip != 'true' &&
+          steps.sync.outputs.changed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?check_name=Checks" --jq '.total_count')" -gt 0 ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Reuse CI checks for this commit
-        if: github.event_name == 'push' && steps.release.outputs.skip != 'true' && steps.sync.outputs.changed != 'true'
+        if: >-
+          github.event_name == 'push' && steps.release.outputs.skip != 'true' &&
+          steps.sync.outputs.changed != 'true' && steps.ci.outputs.found == 'true'
         timeout-minutes: 15
         uses: lewagon/wait-on-check-action@v1.9.1
         with:
@@ -117,7 +133,10 @@ jobs:
           allowed-conclusions: success
 
       - name: Check the release candidate
-        if: steps.release.outputs.skip != 'true' && (github.event_name == 'workflow_dispatch' || steps.sync.outputs.changed == 'true')
+        if: >-
+          steps.release.outputs.skip != 'true' &&
+          (github.event_name == 'workflow_dispatch' || steps.sync.outputs.changed == 'true' ||
+          steps.ci.outputs.found != 'true')
         run: |
           cargo fmt-check
           cargo lint
@@ -129,7 +148,10 @@ jobs:
           cargo doc-all
 
       - uses: EmbarkStudios/cargo-deny-action@v2
-        if: steps.release.outputs.skip != 'true' && (github.event_name == 'workflow_dispatch' || steps.sync.outputs.changed == 'true')
+        if: >-
+          steps.release.outputs.skip != 'true' &&
+          (github.event_name == 'workflow_dispatch' || steps.sync.outputs.changed == 'true' ||
+          steps.ci.outputs.found != 'true')
 
       - name: Commit and publish the checked version
         id: commit
@@ -142,7 +164,34 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -u -- '*Cargo.toml' Cargo.lock
           if git diff --cached --quiet && git show-ref --verify --quiet "refs/tags/v$VERSION"; then
-            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            release_sha=$(git rev-parse HEAD)
+            if [ "$(git rev-parse "refs/tags/v$VERSION^{commit}")" != "$release_sha" ]; then
+              echo "Tag v$VERSION does not point to HEAD" >&2
+              exit 1
+            fi
+            remote_sha=$(git -c credential.helper='!gh auth git-credential' ls-remote --refs origin "refs/tags/v$VERSION" | cut -f1)
+            if [ -n "$remote_sha" ] && [ "$remote_sha" != "$(git rev-parse "refs/tags/v$VERSION")" ]; then
+              echo "Remote tag v$VERSION differs from the local tag" >&2
+              exit 1
+            fi
+            git -c credential.helper='!gh auth git-credential' fetch --no-tags origin "$DEFAULT_BRANCH"
+            if git merge-base --is-ancestor "$release_sha" FETCH_HEAD; then
+              ancestry=0
+            else
+              ancestry=$?
+            fi
+            if [ "$ancestry" -ne 0 ] && [ "$ancestry" -ne 1 ]; then
+              echo "Could not check remote branch ancestry" >&2
+              exit 1
+            fi
+            refs=()
+            if [ "$ancestry" -eq 1 ]; then refs+=("HEAD:refs/heads/$DEFAULT_BRANCH"); fi
+            if [ -z "$remote_sha" ]; then refs+=("refs/tags/v$VERSION:refs/tags/v$VERSION"); fi
+            if [ "${#refs[@]}" -gt 0 ]; then
+              git -c credential.helper='!gh auth git-credential' push --atomic origin "${refs[@]}"
+            fi
+            echo "sha=$release_sha" >> "$GITHUB_OUTPUT"
+            echo "Tag v$VERSION already points at the checked version; nothing to commit."
             exit 0
           fi
           git diff --cached --quiet || git commit -m "chore(release): bump version to $VERSION"
@@ -151,6 +200,7 @@ jobs:
             git fetch origin "$DEFAULT_BRANCH"
             git checkout --detach FETCH_HEAD
             git cherry-pick "$release_sha"
+            release_sha=$(git rev-parse HEAD)
             git -c credential.helper='!gh auth git-credential' push origin "HEAD:refs/heads/$DEFAULT_BRANCH"
           else
             git tag "v$VERSION"
@@ -189,9 +239,14 @@ jobs:
           registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           args: --allow-dirty
 
+      - name: Prepare publishing configuration
+        run: |
+          cp .goreleaser.yml "$RUNNER_TEMP/goreleaser-publish.yml"
+          printf '\ndist: %s\n' "$RUNNER_TEMP/goreleaser-publish" >> "$RUNNER_TEMP/goreleaser-publish.yml"
+
       - uses: goreleaser/goreleaser-action@v7
         with:
-          args: release --clean --skip=before,archive,validate
+          args: release --skip=before,archive,validate --config=${{ runner.temp }}/goreleaser-publish.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: v${{ needs.prepare.outputs.version }}
